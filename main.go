@@ -141,7 +141,7 @@ func (s *systemUtilizationWatcher) watchLoop(ctx context.Context, outChan chan s
 			select {
 			case <-done:
 				return
-			case _ = <-ticker.C:
+			case <-ticker.C:
 				utilization, err := s.getUtilizationFn()
 
 				if err != nil {
@@ -174,11 +174,14 @@ func (s *systemUtilizationWatcher) watchLoop(ctx context.Context, outChan chan s
 
 	fmt.Printf("-----> %v", measurementsSample)
 
-	for {
+	ticker = time.NewTicker(s.measurementIntervalMilliseconds)
+	defer ticker.Stop()
+
+	for range ticker.C {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(s.measurementIntervalMilliseconds):
+		case <-ticker.C:
 			utilization, err := s.getUtilizationFn()
 
 			if err != nil {
@@ -189,11 +192,14 @@ func (s *systemUtilizationWatcher) watchLoop(ctx context.Context, outChan chan s
 
 			if utilization > mean+s.stdIncreaseThreshold*stdDev {
 				outChan <- systemUtilizationEvent{
-					message:  fmt.Sprintf("utilization spike detected"),
+					message:  fmt.Sprintf("utilization spike detected, standard deviation threshold exceeded"),
 					increase: (utilization - (mean + stdDev)) / stdDev,
 				}
 			} else if s.strictThreshold > 0 && utilization > s.strictThreshold {
-
+				outChan <- systemUtilizationEvent{
+					message:  fmt.Sprintf("utilization spike detected, strict threshold exceeded"),
+					increase: utilization - s.strictThreshold,
+				}
 			}
 		}
 	}
